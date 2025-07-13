@@ -7,60 +7,81 @@
     body {
       margin: 0;
       font-family: Arial, sans-serif;
-      background-color: #111;
-      color: #fff;
+      background: #111;
+      color: #eee;
     }
     header {
+      background: #222;
       padding: 1rem;
       font-size: 1.5rem;
-      background-color: #141414;
-      text-align: center;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    input[type="text"] {
+      padding: 0.5rem;
+      font-size: 1rem;
+      border-radius: 5px;
+      border: none;
     }
     .video-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: 1rem;
-      padding: 1rem;
+      padding: 2rem;
     }
     .video-card {
-      background-color: #222;
-      border-radius: 8px;
-      overflow: hidden;
+      background: #1b1b1b;
+      padding: 0.5rem;
+      border-radius: 10px;
       cursor: pointer;
-      transition: transform 0.2s ease;
+      transition: transform 0.2s;
     }
     .video-card:hover {
-      transform: scale(1.05);
+      transform: scale(1.03);
     }
     .video-card img {
       width: 100%;
-      height: 120px;
-      object-fit: cover;
-      display: block;
+      border-radius: 8px;
     }
     .video-title {
-      padding: 0.5rem;
-      font-size: 1rem;
+      margin-top: 0.5rem;
       text-align: center;
+      font-size: 1rem;
     }
+
     .modal {
       display: none;
       position: fixed;
       z-index: 999;
       top: 0; left: 0;
       width: 100%; height: 100%;
-      background: rgba(0,0,0,0.85);
+      background: rgba(0,0,0,0.9);
       justify-content: center;
       align-items: center;
+      padding: 2rem;
+      overflow: auto;
     }
     .modal.active {
       display: flex;
     }
+    .modal-content {
+      display: flex;
+      flex-direction: row;
+      gap: 2rem;
+      flex-wrap: wrap;
+      width: 100%;
+      max-width: 1200px;
+    }
     .modal video {
-      max-width: 90%;
-      max-height: 90%;
-      border: 4px solid #fff;
+      max-width: 100%;
       border-radius: 12px;
+      flex: 1 1 60%;
+    }
+    #videoInfo {
+      flex: 1 1 35%;
+      color: #fff;
+      font-size: 1rem;
     }
     .close-btn {
       position: absolute;
@@ -70,54 +91,295 @@
       color: #fff;
       cursor: pointer;
     }
+    #progressBarContainer {
+      height: 6px;
+      background: #333;
+      margin-top: 8px;
+      cursor: pointer;
+      border-radius: 3px;
+      position: relative;
+    }
+    #progressBar {
+      height: 100%;
+      width: 0%;
+      background: #ff4;
+      border-radius: 3px;
+    }
+    #hoverPreview {
+      position: absolute;
+      bottom: 50px;
+      left: 0;
+      transform: translateX(-50%);
+      display: none;
+      z-index: 10;
+    }
+    #hoverPreview img {
+      width: 160px;
+      height: auto;
+      border: 1px solid #fff;
+      border-radius: 8px;
+    }
+    @media (max-width: 768px) {
+      .modal-content {
+        flex-direction: column;
+      }
+    }
+    #dropZone {
+      border: 2px dashed #666;
+      border-radius: 10px;
+      padding: 2rem;
+      text-align: center;
+      margin: 2rem;
+      background: #222;
+      color: #aaa;
+      font-size: 1.1rem;
+    }
   </style>
 </head>
 <body>
-  <header>🎬 Family Video Stream</header>
 
-  <div class="video-grid" id="videoGrid"></div>
+  <header>
+    🎬 Family Video Stream
+    <input type="text" id="searchInput" placeholder="Search videos...">
+    <label>
+      <input type="checkbox" id="filterFavorites"> ⭐ Favorites only
+    </label>
+  </header>
+
+  <div id="dropZone">Drag & drop videos here to upload</div>
+  <div id="loading" style="padding:2rem; text-align:center;">🔄 Loading videos...</div>
+  <div class="video-grid" id="videoGrid" style="display:none;"></div>
 
   <div class="modal" id="videoModal">
     <div class="close-btn" onclick="closeModal()">×</div>
-    <video id="videoPlayer" controls autoplay></video>
+    <div class="modal-content">
+      <div style="flex: 1 1 60%; display: flex; flex-direction: column;">
+        <video id="videoPlayer" controls autoplay></video>
+        <div id="progressBarContainer">
+          <div id="progressBar"></div>
+          <div id="hoverPreview"><img id="hoverImage" src=""></div>
+        </div>
+      </div>
+      <div id="videoInfo"></div>
+    </div>
   </div>
 
   <script>
     const grid = document.getElementById("videoGrid");
-  
-    fetch("http://127.0.0.1:8000/media/list")
-      .then(response => response.json())
-      .then(videoData => {
-        videoData.forEach(video => {
-          const card = document.createElement("div");
-          card.className = "video-card";
-          card.innerHTML = `
-            <img src="${video.thumbnail}" alt="${video.title}" />
-            <div class="video-title">${video.title}</div>
-          `;
-          card.onclick = () => openModal(video.filename);
-          grid.appendChild(card);
-        });
-      })
-      .catch(err => {
-        grid.innerHTML = "<p style='padding:1rem;'>Failed to load video list</p>";
-        console.error("Error loading video list", err);
-      });
-  
+    const loading = document.getElementById("loading");
+    const searchInput = document.getElementById("searchInput");
+    const filterCheckbox = document.getElementById("filterFavorites");
     const modal = document.getElementById("videoModal");
     const player = document.getElementById("videoPlayer");
-  
-    function openModal(filename) {
-      player.src = `http://127.0.0.1:8000/videos/${filename}`;
-      modal.classList.add("active");
+    const videoInfo = document.getElementById("videoInfo");
+    const progressBar = document.getElementById("progressBar");
+    const progressBarContainer = document.getElementById("progressBarContainer");
+    const hoverPreview = document.getElementById("hoverPreview");
+    const hoverImage = document.getElementById("hoverImage");
+    const dropZone = document.getElementById("dropZone");
+
+    let allVideos = [];
+
+    fetch("/media/list")
+      .then(res => res.json())
+      .then(videos => {
+        allVideos = videos;
+        showVideos(videos);
+      });
+
+    function showVideos(videos) {
+      grid.innerHTML = "";
+      loading.style.display = "none";
+      grid.style.display = "grid";
+
+      videos.forEach(video => {
+        const card = document.createElement("div");
+        card.className = "video-card";
+        card.innerHTML = `
+          <div class="video-thumb" style="position:relative;">
+            <img src="${video.thumbnail}" alt="${video.title}" />
+            <video class="preview" muted preload="none" style="display:none; position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; border-radius:8px;">
+              <source src="${video.preview}" type="video/mp4">
+            </video>
+          </div>
+          <div class="video-title">${video.title}</div>
+        `;
+        card.onclick = () => openModal(video.filename);
+        card.addEventListener("mouseover", () => {
+          const preview = card.querySelector("video.preview");
+          preview.style.display = "block";
+          preview.currentTime = 0;
+          preview.play();
+        });
+        card.addEventListener("mouseout", () => {
+          const preview = card.querySelector("video.preview");
+          preview.pause();
+          preview.style.display = "none";
+        });
+        grid.appendChild(card);
+      });
     }
-  
+
+    function openModal(filename) {
+      const video = allVideos.find(v => v.filename === filename);
+      if (!video) return;
+
+      player.src = `/videos/${filename}`;
+      modal.classList.add("active");
+
+      const meta = video.metadata;
+      const stream = meta.streams?.[0] || {};
+      const format = meta.format || {};
+
+      const duration = parseFloat(stream.duration || format.duration || 0).toFixed(1);
+      const resolution = `${stream.width || "?"} x ${stream.height || "?"}`;
+      const codec = stream.codec_name || "Unknown";
+      const sizeMB = format.size ? (parseInt(format.size) / (1024 * 1024)).toFixed(1) : "?";
+      const bitrate = format.bit_rate ? `${(parseInt(format.bit_rate) / 1000).toFixed(0)} kbps` : "?";
+      const audioStream = meta.streams?.find(s => s.codec_type === "audio") || {};
+      const audioCodec = audioStream.codec_name || "Unknown";
+      const audioChannels = audioStream.channels || "?";
+
+      const favorites = JSON.parse(localStorage.getItem("favorites") || "[]");
+      const isFav = favorites.includes(filename);
+      const favBtnText = isFav ? "★ Favorited" : "☆ Add to Favorites";
+
+      videoInfo.innerHTML = `
+        <h3 style="margin-top:0;">${video.title}</h3>
+        <p><strong>Duration:</strong> ${duration} sec</p>
+        <p><strong>Resolution:</strong> ${resolution}</p>
+        <p><strong>Video Codec:</strong> ${codec}</p>
+        <p><strong>Bitrate:</strong> ${bitrate}</p>
+        <p><strong>File Size:</strong> ${sizeMB} MB</p>
+        <p><strong>Audio:</strong> ${audioCodec}, ${audioChannels} channels</p>
+        <button onclick="downloadVideo('${filename}')" style="margin-top:1rem; padding:0.5rem 1rem;">⬇ Download</button>
+        <button onclick="fullscreenVideo()" style="margin-left:1rem; padding:0.5rem 1rem;">⛶ Fullscreen</button>
+        <button onclick="toggleFavorite('${filename}', this)" style="margin-left:1rem; padding:0.5rem 1rem;">${favBtnText}</button>
+      `;
+    }
+
     function closeModal() {
       player.pause();
       modal.classList.remove("active");
       player.src = "";
     }
+
+    function downloadVideo(filename) {
+      const link = document.createElement("a");
+      link.href = `/videos/${filename}`;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function fullscreenVideo() {
+      if (player.requestFullscreen) player.requestFullscreen();
+      else if (player.webkitRequestFullscreen) player.webkitRequestFullscreen();
+      else if (player.msRequestFullscreen) player.msRequestFullscreen();
+    }
+
+    function toggleFavorite(filename, button) {
+      let favorites = JSON.parse(localStorage.getItem("favorites") || "[]");
+      if (favorites.includes(filename)) {
+        favorites = favorites.filter(f => f !== filename);
+        button.textContent = "☆ Add to Favorites";
+      } else {
+        favorites.push(filename);
+        button.textContent = "★ Favorited";
+      }
+      localStorage.setItem("favorites", JSON.stringify(favorites));
+    }
+
+    document.addEventListener("keydown", e => {
+      if (!modal.classList.contains("active")) return;
+      switch (e.key) {
+        case "Escape": closeModal(); break;
+        case " ": e.preventDefault(); player.paused ? player.play() : player.pause(); break;
+        case "ArrowRight": player.currentTime += 5; break;
+        case "ArrowLeft": player.currentTime -= 5; break;
+        case "f":
+        case "F": fullscreenVideo(); break;
+      }
+    });
+
+    progressBarContainer.addEventListener("click", e => {
+      const rect = progressBarContainer.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const newTime = (clickX / rect.width) * player.duration;
+      player.currentTime = newTime;
+    });
+
+    player.addEventListener("timeupdate", () => {
+      const percent = (player.currentTime / player.duration) * 100;
+      progressBar.style.width = percent + "%";
+    });
+
+    progressBarContainer.addEventListener("mousemove", e => {
+      if (!player.duration) return;
+      const rect = progressBarContainer.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const percent = x / rect.width;
+      const hoverTime = Math.floor(percent * player.duration);
+      const index = Math.floor(hoverTime / 5);
+      hoverImage.src = `/sprites/${player.src.split("/").pop()}_${String(index).padStart(3, "0")}.jpg`;
+      hoverPreview.style.left = `${x}px`;
+      hoverPreview.style.display = "block";
+    });
+
+    progressBarContainer.addEventListener("mouseleave", () => {
+      hoverPreview.style.display = "none";
+    });
+
+    dropZone.addEventListener("dragover", e => {
+      e.preventDefault();
+      dropZone.style.borderColor = "#0f0";
+    });
+
+    dropZone.addEventListener("dragleave", () => {
+      dropZone.style.borderColor = "#666";
+    });
+
+    dropZone.addEventListener("drop", e => {
+      e.preventDefault();
+      dropZone.style.borderColor = "#666";
+      const files = e.dataTransfer.files;
+      for (let file of files) {
+        if (!file.type.startsWith("video/")) continue;
+        uploadVideo(file);
+      }
+    });
+
+    function uploadVideo(file) {
+      const formData = new FormData();
+      formData.append("file", file);
+      fetch("/upload", {
+        method: "POST",
+        body: formData
+      }).then(res => {
+        if (res.ok) {
+          alert(`✅ Uploaded: ${file.name}`);
+          location.reload();
+        } else {
+          alert("❌ Upload failed");
+        }
+      });
+    }
+
+    filterCheckbox.addEventListener("change", applyFilters);
+    searchInput.addEventListener("input", applyFilters);
+
+    function applyFilters() {
+      const keyword = searchInput.value.toLowerCase();
+      const favorites = JSON.parse(localStorage.getItem("favorites") || "[]");
+      const onlyFavs = filterCheckbox.checked;
+      const filtered = allVideos.filter(v => {
+        const match = v.title.toLowerCase().includes(keyword);
+        const isFav = favorites.includes(v.filename);
+        return match && (!onlyFavs || isFav);
+      });
+      showVideos(filtered);
+    }
   </script>
-  
 </body>
 </html>

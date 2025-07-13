@@ -1,42 +1,52 @@
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import os
+from utils import get_video_metadata, generate_thumbnail, generate_preview
 
 app = FastAPI()
 
-# Allow frontend requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Use "*" for dev; restrict in production
-    allow_credentials=True,
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-VIDEO_FOLDER = os.path.join(os.getcwd(), "videos")
-app.mount("/videos", StaticFiles(directory=VIDEO_FOLDER), name="videos")
+BASE = os.getcwd()
+VIDEO_FOLDER = os.path.join(BASE, "videos")
+THUMB_FOLDER = os.path.join(BASE, "thumbnails")
+PREVIEW_FOLDER = os.path.join(BASE, "previews")
 
-@app.get("/")
-async def index():
-    return {"message": "Welcome to FamilyVideoStream!"}
+app.mount("/videos", StaticFiles(directory=VIDEO_FOLDER), name="videos")
+app.mount("/thumbnails", StaticFiles(directory=THUMB_FOLDER), name="thumbnails")
+app.mount("/previews", StaticFiles(directory=PREVIEW_FOLDER), name="previews")
+
+@app.get("/", response_class=HTMLResponse)
+def serve_frontend():
+    with open("index.html", "r", encoding="utf-8") as f:
+        return f.read()
 
 @app.get("/media/list")
-async def get_video_list():
-    files = []
+def list_videos():
+    results = []
     for filename in os.listdir(VIDEO_FOLDER):
-        if filename.lower().endswith((".mp4", ".mov", ".mkv", ".webm")):
-            files.append({
-                "title": filename.rsplit('.', 1)[0],  # Remove extension for title
-                "filename": filename,
-                "thumbnail": f"https://via.placeholder.com/300x169?text={filename.rsplit('.',1)[0]}"
-            })
-    return files
+        if filename.lower().endswith((".mp4", ".mov", ".mkv")):
+            path = os.path.join(VIDEO_FOLDER, filename)
+            thumb_path = os.path.join(THUMB_FOLDER, filename + ".jpg")
+            preview_path = os.path.join(PREVIEW_FOLDER, filename + ".mp4")
 
-@app.get("/stream/{filename}")
-async def stream_video(filename: str):
-    video_path = os.path.join(VIDEO_FOLDER, filename)
-    if os.path.exists(video_path):
-        return FileResponse(video_path, media_type="video/mp4")
-    return {"error": "File not found"}
+            generate_thumbnail(path, thumb_path)
+            generate_preview(path, preview_path)
+
+            metadata = get_video_metadata(path)
+            video_info = {
+                "title": filename.rsplit(".", 1)[0],
+                "filename": filename,
+                "thumbnail": f"/thumbnails/{filename}.jpg",
+                "preview": f"/previews/{filename}.mp4",
+                "metadata": metadata
+            }
+            results.append(video_info)
+    return results

@@ -1,0 +1,19 @@
+# Media folders to ignore
+videos/
+thumbnails/
+previews/
+sprites/
+
+# Logs
+ffmpeg.log
+*.log
+
+# Python cache
+__pycache__/
+*.pyc
+
+# System files
+.DS_Store
+
+# Env files
+.env
