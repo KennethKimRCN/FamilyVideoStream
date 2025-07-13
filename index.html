@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Family Video Stream</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background-color: #111;
+      color: #fff;
+    }
+    header {
+      padding: 1rem;
+      font-size: 1.5rem;
+      background-color: #141414;
+      text-align: center;
+    }
+    .video-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 1rem;
+      padding: 1rem;
+    }
+    .video-card {
+      background-color: #222;
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: transform 0.2s ease;
+    }
+    .video-card:hover {
+      transform: scale(1.05);
+    }
+    .video-card img {
+      width: 100%;
+      height: 120px;
+      object-fit: cover;
+      display: block;
+    }
+    .video-title {
+      padding: 0.5rem;
+      font-size: 1rem;
+      text-align: center;
+    }
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 999;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.85);
+      justify-content: center;
+      align-items: center;
+    }
+    .modal.active {
+      display: flex;
+    }
+    .modal video {
+      max-width: 90%;
+      max-height: 90%;
+      border: 4px solid #fff;
+      border-radius: 12px;
+    }
+    .close-btn {
+      position: absolute;
+      top: 1rem;
+      right: 2rem;
+      font-size: 2rem;
+      color: #fff;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <header>🎬 Family Video Stream</header>
+
+  <div class="video-grid" id="videoGrid"></div>
+
+  <div class="modal" id="videoModal">
+    <div class="close-btn" onclick="closeModal()">×</div>
+    <video id="videoPlayer" controls autoplay></video>
+  </div>
+
+  <script>
+    const grid = document.getElementById("videoGrid");
+  
+    fetch("http://127.0.0.1:8000/media/list")
+      .then(response => response.json())
+      .then(videoData => {
+        videoData.forEach(video => {
+          const card = document.createElement("div");
+          card.className = "video-card";
+          card.innerHTML = `
+            <img src="${video.thumbnail}" alt="${video.title}" />
+            <div class="video-title">${video.title}</div>
+          `;
+          card.onclick = () => openModal(video.filename);
+          grid.appendChild(card);
+        });
+      })
+      .catch(err => {
+        grid.innerHTML = "<p style='padding:1rem;'>Failed to load video list</p>";
+        console.error("Error loading video list", err);
+      });
+  
+    const modal = document.getElementById("videoModal");
+    const player = document.getElementById("videoPlayer");
+  
+    function openModal(filename) {
+      player.src = `http://127.0.0.1:8000/videos/${filename}`;
+      modal.classList.add("active");
+    }
+  
+    function closeModal() {
+      player.pause();
+      modal.classList.remove("active");
+      player.src = "";
+    }
+  </script>
+  
+</body>
+</html>
