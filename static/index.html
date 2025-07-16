@@ -36,6 +36,7 @@
       border-radius: 10px;
       cursor: pointer;
       transition: transform 0.2s;
+      position: relative;
     }
     .video-card:hover {
       transform: scale(1.03);
@@ -43,13 +44,39 @@
     .video-card img {
       width: 100%;
       border-radius: 8px;
+      background: #333;
     }
     .video-title {
       margin-top: 0.5rem;
       text-align: center;
       font-size: 1rem;
     }
-
+    .placeholder-thumb {
+      width: 100%;
+      height: 120px;
+      background: #333;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #666;
+      font-size: 2rem;
+    }
+    .processing-badge {
+      position: absolute;
+      top: 0.5rem;
+      right: 0.5rem;
+      background: #ff6b35;
+      color: white;
+      padding: 0.2rem 0.5rem;
+      border-radius: 12px;
+      font-size: 0.8rem;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
     .modal {
       display: none;
       position: fixed;
@@ -179,13 +206,65 @@
     const dropZone = document.getElementById("dropZone");
 
     let allVideos = [];
+    let processingVideos = new Set();
 
-    fetch("/media/list")
-      .then(res => res.json())
-      .then(videos => {
-        allVideos = videos;
-        showVideos(videos);
+    // Load videos immediately
+    loadVideos();
+
+    // Check for asset updates every 5 seconds
+    setInterval(checkAssetUpdates, 5000);
+
+    function loadVideos() {
+      fetch("/media/list")
+        .then(res => res.json())
+        .then(videos => {
+          allVideos = videos;
+          // Track videos that are still processing
+          videos.forEach(video => {
+            if (!video.assets_ready) {
+              processingVideos.add(video.filename);
+            }
+          });
+          showVideos(videos);
+        })
+        .catch(err => {
+          console.error("Error loading videos:", err);
+          loading.innerHTML = "❌ Error loading videos";
+        });
+    }
+
+    function checkAssetUpdates() {
+      if (processingVideos.size === 0) return;
+
+      // Check status of processing videos
+      const statusPromises = Array.from(processingVideos).map(filename => 
+        fetch(`/media/status/${filename}`)
+          .then(res => res.json())
+          .catch(() => null)
+      );
+
+      Promise.all(statusPromises).then(results => {
+        let updated = false;
+        results.forEach(status => {
+          if (status && status.assets_ready) {
+            processingVideos.delete(status.filename);
+            // Update the video in allVideos
+            const video = allVideos.find(v => v.filename === status.filename);
+            if (video) {
+              const basename = status.filename.split('.')[0];
+              video.thumbnail = `/thumbnails/${basename}.jpg`;
+              video.preview = `/previews/${basename}.mp4`;
+              video.assets_ready = true;
+              updated = true;
+            }
+          }
+        });
+        
+        if (updated) {
+          applyFilters(); // Refresh the display
+        }
       });
+    }
 
     function showVideos(videos) {
       grid.innerHTML = "";
@@ -195,27 +274,44 @@
       videos.forEach(video => {
         const card = document.createElement("div");
         card.className = "video-card";
+        
+        const thumbnailElement = video.thumbnail ? 
+          `<img src="${video.thumbnail}" alt="${video.title}" />` :
+          `<div class="placeholder-thumb">🎬</div>`;
+        
+        const processingBadge = !video.assets_ready ? 
+          `<div class="processing-badge">Processing...</div>` : '';
+        
         card.innerHTML = `
           <div class="video-thumb" style="position:relative;">
-            <img src="${video.thumbnail}" alt="${video.title}" />
+            ${thumbnailElement}
+            ${processingBadge}
             <video class="preview" muted preload="none" style="display:none; position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; border-radius:8px;">
-              <source src="${video.preview}" type="video/mp4">
+              ${video.preview ? `<source src="${video.preview}" type="video/mp4">` : ''}
             </video>
           </div>
           <div class="video-title">${video.title}</div>
         `;
+        
         card.onclick = () => openModal(video.filename);
-        card.addEventListener("mouseover", () => {
-          const preview = card.querySelector("video.preview");
-          preview.style.display = "block";
-          preview.currentTime = 0;
-          preview.play();
-        });
-        card.addEventListener("mouseout", () => {
-          const preview = card.querySelector("video.preview");
-          preview.pause();
-          preview.style.display = "none";
-        });
+        
+        // Only add hover preview if preview exists
+        if (video.preview) {
+          card.addEventListener("mouseover", () => {
+            const preview = card.querySelector("video.preview");
+            if (preview.querySelector("source")) {
+              preview.style.display = "block";
+              preview.currentTime = 0;
+              preview.play();
+            }
+          });
+          card.addEventListener("mouseout", () => {
+            const preview = card.querySelector("video.preview");
+            preview.pause();
+            preview.style.display = "none";
+          });
+        }
+        
         grid.appendChild(card);
       });
     }
@@ -359,7 +455,7 @@
       }).then(res => {
         if (res.ok) {
           alert(`✅ Uploaded: ${file.name}`);
-          location.reload();
+          loadVideos(); // Reload video list
         } else {
           alert("❌ Upload failed");
         }
